@@ -511,9 +511,9 @@ def port_policy_present(name, sel_type, protocol=None, port=None, sel_range=None
     """
     ret = {"name": name, "result": False, "changes": {}, "comment": ""}
     old_state = __salt__["selinux.port_get_policy"](
-        name=name, protocol=protocol, port=port,
+        name=name, sel_type=sel_type, protocol=protocol, port=port,
     )
-    if old_state and old_state["sel_type"] == sel_type:
+    if old_state:
         ret.update(
             {
                 "result": True,
@@ -527,6 +527,10 @@ def port_policy_present(name, sel_type, protocol=None, port=None, sel_range=None
     if __opts__["test"]:
         ret.update({"result": None})
     else:
+        old_state = __salt__["selinux.port_get_policy"](
+            name=name,
+            protocol=protocol,
+            port=port, )
         if old_state:
             module_method = "selinux.port_modify_policy"
         else:
