@@ -143,6 +143,7 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
         port = "8080"
         ret = {"name": name, "changes": {}, "result": False, "comment": ""}
 
+        # Test when already present with same sel_type
         mock_add = MagicMock(return_value={"retcode": 0})
         mock_modify = MagicMock(return_value={"retcode": 0})
         mock_get = MagicMock(
@@ -160,14 +161,78 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                 "selinux.port_modify_policy": mock_modify,
             },
         ):
-            comt = 'SELinux policy for "{}" already present '.format(name)
-            ret.update({"comment": comt, "result": True})
-            self.assertDictEqual(
-                selinux.port_policy_present(name, "http_cache_port_t"), ret
-            )
+            with patch.dict(selinux.__opts__, {"test": False}):
+                comt = 'SELinux policy for "{}" already present '.format(name)
+                ret.update({"comment": comt, "result": True})
+                self.assertDictEqual(
+                    selinux.port_policy_present(name, "http_cache_port_t"), ret
+                )
 
+        # Test adding new port policy
+        mock_add = MagicMock(return_value={"retcode": 0})
+        mock_modify = MagicMock(return_value={"retcode": 0})
+        mock_get = MagicMock(
+            side_effect=[
+                None,
+                None,
+                None,
+                {"sel_type": "http_cache_port_t", "protocol": "tcp", "port": "8080"},
+            ]
+        )
+        with patch.dict(
+            selinux.__salt__,
+            {
+                "selinux.port_get_policy": mock_get,
+                "selinux.port_add_policy": mock_add,
+                "selinux.port_modify_policy": mock_modify,
+            },
+        ):
             with patch.dict(selinux.__opts__, {"test": True}):
                 ret.update({"comment": "", "result": None})
+                self.assertDictEqual(
+                    selinux.port_policy_present(name, "http_cache_port_t"), ret
+                )
+
+            with patch.dict(selinux.__opts__, {"test": False}):
+                ret.update(
+                    {
+                        "comment": "",
+                        "changes": {
+                            "old": None,
+                            "new": {
+                                "sel_type": "http_cache_port_t",
+                                "protocol": "tcp",
+                                "port": "8080",
+                            },
+                        },
+                        "result": True,
+                    }
+                )
+                self.assertDictEqual(
+                    selinux.port_policy_present(name, "http_cache_port_t"), ret
+                )
+
+        # Test modifying policy to a new sel_type
+        mock_add = MagicMock(return_value={"retcode": 0})
+        mock_modify = MagicMock(return_value={"retcode": 0})
+        mock_get = MagicMock(
+            side_effect=[
+                None,
+                None,
+                {"sel_type": "http_cache_port_t", "protocol": "tcp", "port": "8080"},
+                {"sel_type": "http_port_t", "protocol": "tcp", "port": "8080"},
+            ]
+        )
+        with patch.dict(
+            selinux.__salt__,
+            {
+                "selinux.port_get_policy": mock_get,
+                "selinux.port_add_policy": mock_add,
+                "selinux.port_modify_policy": mock_modify,
+            },
+        ):
+            with patch.dict(selinux.__opts__, {"test": True}):
+                ret.update({"comment": "", "changes": {}, "result": None})
                 self.assertDictEqual(
                     selinux.port_policy_present(name, "http_port_t"), ret
                 )
@@ -195,9 +260,16 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                     selinux.port_policy_present(name, "http_port_t"), ret
                 )
 
+        # Test adding new port policy with custom name and using protocol and port parameters
         mock_add = MagicMock(return_value={"retcode": 0})
         mock_modify = MagicMock(return_value={"retcode": 0})
-        mock_get = MagicMock(return_value=None)
+        mock_get = MagicMock(
+            side_effect=[
+                None,
+                None,
+                {"sel_type": "http_cache_port_t", "protocol": "tcp", "port": "8081"},
+            ]
+        )
         with patch.dict(
             selinux.__salt__,
             {
@@ -206,34 +278,10 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                 "selinux.port_modify_policy": mock_modify,
             },
         ):
-            with patch.dict(selinux.__opts__, {"test": True}):
-                ret.update({"comment": "", "result": None})
-                self.assertDictEqual(
-                    selinux.port_policy_present(name, "http_cache_port_t"), ret
-                )
-
             with patch.dict(selinux.__opts__, {"test": False}):
                 ret.update(
                     {
-                        "comment": "",
-                        "changes": {
-                            "old": None,
-                            "new": {
-                                "sel_type": "http_cache_port_t",
-                                "protocol": "tcp",
-                                "port": "8080",
-                            },
-                        },
-                        "result": True,
-                    }
-                )
-                self.assertDictEqual(
-                    selinux.port_policy_present(name, "http_cache_port_t"), ret
-                )
-
-            with patch.dict(selinux.__opts__, {"test": False}):
-                ret.update(
-                    {
+                        "name": "required_protocol_port",
                         "comment": "",
                         "changes": {
                             "old": None,
@@ -256,6 +304,7 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                     ret,
                 )
 
+        # Test failure of adding new policy
         mock_add = MagicMock(return_value={"retcode": 1})
         mock_modify = MagicMock(return_value={"retcode": 1})
         mock_get = MagicMock(return_value=None)
@@ -267,11 +316,14 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                 "selinux.port_modify_policy": mock_modify,
             },
         ):
-            comt = "Error adding new policy: 1"
-            ret.update({"comment": comt, "result": True})
-            self.assertDictEqual(
-                selinux.port_policy_present(name, "http_cache_port_t"), ret
-            )
+            with patch.dict(selinux.__opts__, {"test": False}):
+                comt = "Error adding new policy: {'retcode': 1}"
+                ret.update(
+                    {"name": name, "comment": comt, "changes": {}, "result": False}
+                )
+                self.assertDictEqual(
+                    selinux.port_policy_present(name, "http_cache_port_t"), ret
+                )
 
     # 'port_policy_absent' function tests: 1
 
@@ -284,13 +336,31 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
         port = "8080"
         ret = {"name": name, "changes": {}, "result": False, "comment": ""}
 
+        # Test policy already removed
+        mock_delete = MagicMock(return_value={"retcode": 0})
+        mock_get = MagicMock(return_value=None)
+        with patch.dict(
+            selinux.__salt__,
+            {
+                "selinux.port_get_policy": mock_get,
+                "selinux.port_delete_policy": mock_delete,
+            },
+        ):
+            with patch.dict(selinux.__opts__, {"test": False}):
+                comt = 'SELinux policy for "{}" already absent '.format(name)
+                ret.update({"comment": comt, "changes": {}, "result": True})
+                self.assertDictEqual(
+                    selinux.port_policy_absent(name, "http_cache_port_t"), ret
+                )
+
+        # Test removing a policy
         mock_delete = MagicMock(return_value={"retcode": 0})
         mock_get = MagicMock(
-            return_value={
-                "sel_type": "http_cache_port_t",
-                "protocol": "tcp",
-                "port": "8080",
-            }
+            side_effect=[
+                {"sel_type": "http_cache_port_t", "protocol": "tcp", "port": "8080"},
+                {"sel_type": "http_cache_port_t", "protocol": "tcp", "port": "8080"},
+                None,
+            ]
         )
         with patch.dict(
             selinux.__salt__,
@@ -324,13 +394,13 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                     selinux.port_policy_absent(name, "http_cache_port_t"), ret
                 )
 
+        # Test removing a policy using custom name and with protocol and port aprameters
         mock_delete = MagicMock(return_value={"retcode": 0})
         mock_get = MagicMock(
-            return_value={
-                "sel_type": "http_cache_port_t",
-                "protocol": "tcp",
-                "port": "8081",
-            }
+            side_effect=[
+                {"sel_type": "http_cache_port_t", "protocol": "tcp", "port": "8081"},
+                None,
+            ]
         )
         with patch.dict(
             selinux.__salt__,
@@ -342,6 +412,7 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
             with patch.dict(selinux.__opts__, {"test": False}):
                 ret.update(
                     {
+                        "name": "required_protocol_port",
                         "comment": "",
                         "changes": {
                             "old": {
@@ -364,6 +435,7 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                     ret,
                 )
 
+        # Test failure to delete a policy
         mock_delete = MagicMock(return_value={"retcode": 2})
         mock_get = MagicMock(
             return_value={
@@ -379,23 +451,11 @@ class SelinuxTestCase(TestCase, LoaderModuleMockMixin):
                 "selinux.port_delete_policy": mock_delete,
             },
         ):
-            comt = "Error deleting policy: 2"
-            ret.update({"comment": comt, "result": True})
-            self.assertDictEqual(
-                selinux.port_policy_absent(name, "http_cache_port_t"), ret
-            )
-
-        mock_delete = MagicMock(return_value={"retcode": 0})
-        mock_get = MagicMock(return_value=None)
-        with patch.dict(
-            selinux.__salt__,
-            {
-                "selinux.port_get_policy": mock_get,
-                "selinux.port_delete_policy": mock_delete,
-            },
-        ):
-            comt = 'SELinux policy for "{}" already absent '.format(name)
-            ret.update({"comment": comt, "result": True})
-            self.assertDictEqual(
-                selinux.port_policy_absent(name, "http_cache_port_t"), ret
-            )
+            with patch.dict(selinux.__opts__, {"test": False}):
+                comt = "Error deleting policy: {'retcode': 2}"
+                ret.update(
+                    {"name": name, "comment": comt, "changes": {}, "result": False}
+                )
+                self.assertDictEqual(
+                    selinux.port_policy_absent(name, "http_cache_port_t"), ret
+                )
