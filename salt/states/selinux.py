@@ -517,10 +517,7 @@ def port_policy_present(name, sel_type, protocol=None, port=None, sel_range=None
         ret.update(
             {
                 "result": True,
-                "comment": 'SELinux policy for "{0}" already present '.format(name)
-                + 'with specified sel_type "{0}", protocol "{1}" and port "{2}".'.format(
-                    sel_type, protocol, port
-                ),
+                "comment": 'SELinux policy for "{0}" already present '.format(name),
             }
         )
         return ret
@@ -580,10 +577,7 @@ def port_policy_absent(name, sel_type=None, protocol=None, port=None):
         ret.update(
             {
                 "result": True,
-                "comment": 'SELinux policy for "{0}" already absent '.format(name)
-                + 'with specified sel_type "{0}", protocol "{1}" and port "{2}".'.format(
-                    sel_type, protocol, port
-                ),
+                "comment": 'SELinux policy for "{0}" already absent '.format(name),
             }
         )
         return ret
